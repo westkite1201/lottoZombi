@@ -1,7 +1,6 @@
 const puppeteer = require("puppeteer");
 
 
-
 // 사용시 인위적인 딜레이를 주기위한 함수
 
 function delay( timeout ) {
@@ -10,27 +9,36 @@ function delay( timeout ) {
   });
 }
 
-// ElementHandle method:
 
-  /**
-   * @return {!Promise<?Puppeteer.Frame>}
-   */
-  
-  getFrame  = async() =>{ 
-    const nodeInfo = await this._client.send('DOM.describeNode', {
-      objectId: this._remoteObject.objectId
-    }).catch(error => void debugError(error));
-
-    if (typeof nodeInfo.node.frameId === 'string') {
-      for (const frame of this._page.frames()) {
-        if (nodeInfo.node.frameId === frame._id)
-          return frame;
-      }
-      return null;
-    } else {
-      return null;
+class AlertNotExistError extends Error {
+}
+ acceptAlertAfterAction =  async(page, cb) => {
+    const browser = await page.browser();
+    const isCalled = false;
+    let event;
+    function onEvent(resolve) {
+        return function (dialog) {
+            dialog.accept();
+            isCalled = true;
+            resolve();
+        }
     }
-  }
+    try {
+        await new Promise((resolve, reject) => {
+            event = onEvent(resolve);
+            browser.on(event);
+            cb();
+            setTimeout(() => {
+                if(!isCalled) reject(new AlertNotExistError());
+            }, 3000);
+        });
+    } catch (error) {
+        throw error;
+    } finally {
+        browser.off(event);
+    }
+}
+
 
 puppeteer.launch({
 	  headless : false	// 헤드리스모드의 사용여부를 묻는다.
@@ -55,14 +63,26 @@ puppeteer.launch({
     // await page.click("#gnb > ul > li.gnb1 > div > ul > li.gnb1_1 > a")
  
     await delay(1000);
-   
-    await page.goto("https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LO40",{ waitUntil : "networkidle0" })
-    await page.evaluate(() =>{ 
-        console.log(`url is ${location.href}`) 
-        console.log( document.querySelector('#num2') ) 
+  
+    //iframe src로 직접 이동 
+    await page.goto("https://ol.dhlottery.co.kr/olotto/game/game645.do",{ waitUntil : "networkidle0" })
+  
+    await page.click("#num2"); //자동 번호 발급 선택
+                              //현재 수량은 디폴트 
+    
+                    
+    await page.click("#btnSelectNum") //확인버튼 
+    await page.waitFor("#btnBuy");
+    await page.click('#btnBuy');
+
+
+
+
+    await page.on('dialog', async dialog => {
+        console.log(dialog.message());
+        await dialog.dismiss();
     });
   
-
 
 });
 
